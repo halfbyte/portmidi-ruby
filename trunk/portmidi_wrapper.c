@@ -2,6 +2,11 @@
 #include "portmidi.h"
 #include "portmidi_wrapper.h"
 
+/*
+ MidiDevice constructor. Opens the Device with the given device id
+ Will open an Input stream on an input device and an Output stream on
+ an output device.
+*/
 static VALUE md_init(VALUE self, VALUE device_number) {
 	DeviceStream *stream;
 	PmError error;
@@ -17,10 +22,10 @@ static VALUE md_init(VALUE self, VALUE device_number) {
 	const PmDeviceInfo *deviceInfo = Pm_GetDeviceInfo(device_id);
 	if(deviceInfo->input) {
 		error = Pm_OpenInput(&midiStream, (PmDeviceID)device_id, NULL, 255, NULL, NULL);
-		//stream->type = 0;
+		stream->type = 0;
 	} else {
 		error = Pm_OpenOutput(&midiStream, (PmDeviceID)device_id, NULL, 255, NULL, NULL, 0);
-		//stream->type = 1;
+		stream->type = 1;
 	}
 	stream->stream = midiStream;
   	return self; 
@@ -41,7 +46,13 @@ static VALUE md_alloc(VALUE klass) {
 	obj = Data_Wrap_Struct(klass, 0, md_free, stream);
 	return obj;	
 }
-
+/*
+	Reads an Event from the Input stream. An event consists of up to 4 bytes. The method returns 
+	error,[b1,b2,b3,b4] where error is the number of bytes read or the error code (if <0)
+	call-seq:
+		read -> error, [b1,b2,b3,b4]
+		
+*/ 
 static VALUE md_read(VALUE self) {
 	DeviceStream *stream;
 	VALUE msg;
@@ -73,7 +84,17 @@ static VALUE md_read(VALUE self) {
 	return array;
 	
 }
+/*
+  Returns true if the input stream contains events to be fetched by read. 
+  
+  Returns false if no events are pending
+  
+  Returns error code (<0) if an error occurred
 
+  call-seq:
+	md_poll -> result
+	
+*/
 static VALUE md_poll(VALUE self) {
 	DeviceStream *stream;
 	VALUE more;
