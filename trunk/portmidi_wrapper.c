@@ -46,6 +46,52 @@ static VALUE md_alloc(VALUE klass) {
 	obj = Data_Wrap_Struct(klass, 0, md_free, stream);
 	return obj;	
 }
+
+/* 
+  Sets the midi filter for the MidiDevice
+  Returns 0 or error code (if <0)
+
+call-seq:
+	filter=(filter_bitmask) -> error
+	
+*/
+static VALUE md_set_filter(VALUE self, VALUE filter_value) {
+	DeviceStream *stream;
+	PmError error;
+	long filters;
+	VALUE err;
+	
+	Data_Get_Struct(self,DeviceStream,stream);
+	filters = NUM2LONG(filter_value);
+	error = Pm_SetFilter(stream->stream, filters);
+	
+	err = INT2NUM(error);
+	return err;
+}
+/* 
+  Sets a channel mask for the MidiDevice
+  (probably only useful on input devices)
+  Returns 0 or error code (if <0)
+  wants a 16bit bitfield
+
+call-seq:
+	channel_mask=(channel_bitmask) -> error
+	
+*/
+static VALUE md_set_channel_mask(VALUE self, VALUE mask_value) {
+	DeviceStream *stream;
+	PmError error;
+	int mask;
+	VALUE err;
+
+	Data_Get_Struct(self,DeviceStream,stream);
+	mask = NUM2INT(mask_value);
+	error = Pm_SetChannelMask(stream->stream, mask);
+
+	err = INT2NUM(error);
+	return err;	
+}
+
 /*
 	Reads an Event from the Input stream. An event consists of up to 4 bytes. The method returns 
 	error,[b1,b2,b3,b4] where error is the number of bytes read or the error code (if <0)
@@ -257,6 +303,7 @@ static VALUE mdd_get(VALUE self, VALUE device_number) {
   obj = Data_Wrap_Struct(cMidiDeviceInfo, 0, 0, deviceInfo);
   return obj;
 }
+
 /*
 Returns the device name
 
@@ -352,7 +399,34 @@ void Init_portmidi() {
 	rb_define_method(cMidiDevice, "error_text", md_error_text, 1);
 	rb_define_method(cMidiDevice, "host_error?", md_host_error, 0);
 	rb_define_method(cMidiDevice, "host_error_text", md_host_error_text, 0);
+	rb_define_method(cMidiDevice, "filter=", md_set_filter, 1);
+	rb_define_method(cMidiDevice, "channel_mask=", md_set_channel_mask, 1);
 	
-	
+	// setting constants...
 
+	rb_define_const(cMidiSystem, "FILTER_ACTIVE_SENSING", LONG2NUM(PM_FILT_ACTIVE));
+	rb_define_const(cMidiSystem, "FILTER_SYSEX", LONG2NUM(PM_FILT_SYSEX));
+	rb_define_const(cMidiSystem, "FILTER_CLOCK", LONG2NUM(PM_FILT_CLOCK));
+	rb_define_const(cMidiSystem, "FILTER_PLAY", LONG2NUM(PM_FILT_PLAY));
+	rb_define_const(cMidiSystem, "FILTER_TICK", LONG2NUM(PM_FILT_TICK));
+	rb_define_const(cMidiSystem, "FILTER_FD", LONG2NUM(PM_FILT_FD));
+	rb_define_const(cMidiSystem, "FILTER_UNDEFINED", LONG2NUM(PM_FILT_UNDEFINED));
+	rb_define_const(cMidiSystem, "FILTER_RESET", LONG2NUM(PM_FILT_RESET));
+	rb_define_const(cMidiSystem, "FILTER_REALTIME", LONG2NUM(PM_FILT_REALTIME));
+	
+	rb_define_const(cMidiSystem, "FILTER_NOTE", LONG2NUM(PM_FILT_NOTE));
+	
+	rb_define_const(cMidiSystem, "FILTER_CHANNEL_AFTERTOUCH", LONG2NUM(PM_FILT_CHANNEL_AFTERTOUCH));	
+	rb_define_const(cMidiSystem, "FILTER_POLY_AFTERTOUCH", LONG2NUM(PM_FILT_POLY_AFTERTOUCH));
+	rb_define_const(cMidiSystem, "FILTER_AFTERTOUCH", LONG2NUM(PM_FILT_AFTERTOUCH));
+
+	rb_define_const(cMidiSystem, "FILTER_PROGRAM", LONG2NUM(PM_FILT_PROGRAM));
+	rb_define_const(cMidiSystem, "FILTER_CONTROL_CHANGE", LONG2NUM(PM_FILT_CONTROL));
+	rb_define_const(cMidiSystem, "FILTER_PITCHBEND", LONG2NUM(PM_FILT_PITCHBEND));
+	
+	rb_define_const(cMidiSystem, "FILTER_MTC", LONG2NUM(PM_FILT_MTC));
+	rb_define_const(cMidiSystem, "FILTER_SONG_POSITION", LONG2NUM(PM_FILT_SONG_POSITION));
+	rb_define_const(cMidiSystem, "FILTER_SONG_SELECT", LONG2NUM(PM_FILT_SONG_SELECT));
+	rb_define_const(cMidiSystem, "FILTER_TUNE", LONG2NUM(PM_FILT_TUNE));
+	rb_define_const(cMidiSystem, "FILTER_SYSTEM_COMMON", LONG2NUM(PM_FILT_SYSTEMCOMMON));
 }

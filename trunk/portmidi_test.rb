@@ -9,7 +9,7 @@ class TestPortmidi < Object
     puts di.input?
     puts di.output?
 
-    sysex_test
+    read_loop
 
     s.destroy
   end
@@ -18,14 +18,16 @@ class TestPortmidi < Object
     mw = MidiDevice.new(2)
     mr = MidiDevice.new(1)
     
-    puts "-#{mw.host_error_text}-"
+    
+    mr.filter=MidiSystem::FILTER_SYSEX;
+    gets
     
     message = String.new
     [0xf0, 0x7e, 0x10, 0x06, 0x01, 0xf7].each do |b|
       message << b
     end
+    
     error = mw.write_sysex(message)
-    puts mw.error_text(error)
     
     loop do
       if p = mr.poll
@@ -35,6 +37,17 @@ class TestPortmidi < Object
         end
       end
     end
+
+    error = mw.write_sysex(message)
+    loop do
+      if p = mr.poll
+        read, msg =  mr.read
+        if (read>0)
+          puts msg.inspect
+        end
+      end
+    end
+
     
   end
   def write_test
@@ -51,13 +64,13 @@ class TestPortmidi < Object
   def read_loop
     mw = MidiDevice.new(2)
     mr = MidiDevice.new(0)
+    puts "#{1 << 2}"
+    mr.channel_mask = 1 << 0 | 1 << 1
     loop do
       if p = mr.poll
         read, msg =  mr.read
         if (read>0)
-          # puts msg.inspect
-          err, sent_msg = mw.write_short(msg)
-          puts "%8x" % sent_msg
+          err = mw.write_short(msg)
         end
       end
     end
