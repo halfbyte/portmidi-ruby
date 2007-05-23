@@ -8,43 +8,53 @@
  an output device.
 */
 static VALUE md_init(VALUE self, VALUE device_number) {
-	DeviceStream *stream;
+	DeviceData *device;
 	PmError error;
 	int device_id;
 	int count;
 	PmStream *midiStream;
 	
-	
 	device_id = NUM2INT(device_number);
-	
-  	Data_Get_Struct(self,DeviceStream,stream);
-
-	const PmDeviceInfo *deviceInfo = Pm_GetDeviceInfo(device_id);
-	if(deviceInfo->input) {
-		error = Pm_OpenInput(&midiStream, (PmDeviceID)device_id, NULL, 255, NULL, NULL);
-		stream->type = 0;
-	} else {
-		error = Pm_OpenOutput(&midiStream, (PmDeviceID)device_id, NULL, 255, NULL, NULL, 0);
-		stream->type = 1;
-	}
-	stream->stream = midiStream;
+  	Data_Get_Struct(self,DeviceData,device);
+	device->deviceInfo = Pm_GetDeviceInfo(device_id);
+	device->id = device_id;
   	return self; 
 }
 
 static VALUE md_free(void *p) {
-	DeviceStream *stream;
-	stream = p;
-	Pm_Close(stream->stream);
-	free(stream);
+	DeviceData *device;
+	device = p;
+	free(device);
 }
 
 static VALUE md_alloc(VALUE klass) {
-	DeviceStream *stream;
+	DeviceData *device;
 	VALUE obj;
-	stream = malloc(sizeof(*stream));
-	stream->stream = NULL;
-	obj = Data_Wrap_Struct(klass, 0, md_free, stream);
+	device = malloc(sizeof(*device));
+	device->stream = NULL;
+	obj = Data_Wrap_Struct(klass, 0, md_free, device);
 	return obj;	
+}
+
+static VALUE md_open(VALUE self) {
+	DeviceData *device;
+	PmError error;
+	PmStream *stream;
+	
+	Data_Get_Struct(self,DeviceData,device);
+		
+	if (device->deviceInfo->input) {
+		error = Pm_OpenInput(&stream, (PmDeviceID)device->id, NULL, 255, NULL, NULL);
+	} else {
+		error = Pm_OpenOutput(&stream, (PmDeviceID)device->id, NULL, 255, NULL, NULL, 0);
+	}
+	device->stream = stream;
+	
+	if (rb_block_given_p()) {
+		rb_yield(self);
+		Pm_Close(stream);
+	}
+	return self;
 }
 
 /* 
@@ -56,14 +66,14 @@ call-seq:
 	
 */
 static VALUE md_set_filter(VALUE self, VALUE filter_value) {
-	DeviceStream *stream;
+	DeviceData *device;
 	PmError error;
 	long filters;
 	VALUE err;
 	
-	Data_Get_Struct(self,DeviceStream,stream);
+	Data_Get_Struct(self,DeviceData,device);
 	filters = NUM2LONG(filter_value);
-	error = Pm_SetFilter(stream->stream, filters);
+	error = Pm_SetFilter(device->stream, filters);
 	
 	err = INT2NUM(error);
 	return err;
@@ -79,14 +89,14 @@ call-seq:
 	
 */
 static VALUE md_set_channel_mask(VALUE self, VALUE mask_value) {
-	DeviceStream *stream;
+	DeviceData *device;
 	PmError error;
 	int mask;
 	VALUE err;
 
-	Data_Get_Struct(self,DeviceStream,stream);
+	Data_Get_Struct(self,DeviceData,device);
 	mask = NUM2INT(mask_value);
-	error = Pm_SetChannelMask(stream->stream, mask);
+	error = Pm_SetChannelMask(device->stream, mask);
 
 	err = INT2NUM(error);
 	return err;	
@@ -100,7 +110,7 @@ static VALUE md_set_channel_mask(VALUE self, VALUE mask_value) {
 		
 */ 
 static VALUE md_read(VALUE self) {
-	DeviceStream *stream;
+	DeviceData *device;
 	VALUE msg;
 	VALUE err;
 	VALUE array;
@@ -111,8 +121,8 @@ static VALUE md_read(VALUE self) {
 	PmEvent message;
 	PmError error;
 
-	Data_Get_Struct(self,DeviceStream,stream);
-	error = Pm_Read(stream->stream, &message, 1);
+	Data_Get_Struct(self,DeviceData,device);
+	error = Pm_Read(device->stream, &message, 1);
 	
 	array = rb_ary_new2(2);
 	err = INT2NUM(error);
@@ -139,14 +149,14 @@ call-seq:
 
 */
 static VALUE md_write_sysex(VALUE self, VALUE sysex) {
-	DeviceStream *stream;
+	DeviceData *device;
 	PmError error;
 	VALUE err;
 	VALUE sysex_string;
-	Data_Get_Struct(self,DeviceStream,stream);
+	Data_Get_Struct(self,DeviceData,device);
 	sysex_string = StringValue(sysex);
 	
-	error = Pm_WriteSysEx(stream->stream, 0, (unsigned char *)RSTRING(sysex_string)->ptr);	
+	error = Pm_WriteSysEx(device->stream, 0, (unsigned char *)RSTRING(sysex_string)->ptr);	
 	err = INT2NUM(error);
 	return err;	
 	
@@ -161,7 +171,7 @@ call-seq:
 	
 */
 static VALUE md_write_short(VALUE self, VALUE bytes) {
-	DeviceStream *stream;
+	DeviceData *device;
 	PmError error;
 	VALUE err;
 	int shift = 32;
@@ -171,7 +181,7 @@ static VALUE md_write_short(VALUE self, VALUE bytes) {
 	long byte = 0;
 	long len;
 	
-	Data_Get_Struct(self,DeviceStream,stream);
+	Data_Get_Struct(self,DeviceData,device);
 	
 	len = RARRAY(bytes)->len;
 	if (len > 4) len = 4;
@@ -183,7 +193,7 @@ static VALUE md_write_short(VALUE self, VALUE bytes) {
 		shift -= 8;
 
 	}
-	error = Pm_WriteShort(stream->stream, 0, msg);
+	error = Pm_WriteShort(device->stream, 0, msg);
 	err = INT2NUM(error);
 	return err;
 }
@@ -194,7 +204,7 @@ call-seq:
 	error_text(error_code) -> message
 
 */
-static VALUE md_error_text(VALUE self, VALUE error_value) {
+static VALUE ms_error_text(VALUE self, VALUE error_value) {
 	const char *error_message;
 	PmError error;
 	VALUE error_text;
@@ -215,11 +225,11 @@ call-seq:
 */
 
 static VALUE md_host_error(VALUE self) {
-	DeviceStream *stream;
+	DeviceData *device;
 	int error;
 	
-	Data_Get_Struct(self,DeviceStream,stream);
-	error = Pm_HasHostError(stream->stream);
+	Data_Get_Struct(self,DeviceData,device);
+	error = Pm_HasHostError(device->stream);
 	if(error) return Qtrue;
 	return Qfalse;
 }
@@ -254,55 +264,18 @@ static VALUE md_host_error_text(VALUE self) {
 	
 */
 static VALUE md_poll(VALUE self) {
-	DeviceStream *stream;
+	DeviceData *device;
 	VALUE more;
 	PmError error;
-	Data_Get_Struct(self,DeviceStream,stream);
-	error = Pm_Poll(stream->stream);
+	Data_Get_Struct(self,DeviceData,device);
+	error = Pm_Poll(device->stream);
 	if (error == TRUE) return Qtrue;
 	if (error == FALSE) return Qfalse;
 	more = INT2NUM(error);
 	return more;
 }
 
-/*
-Returns the number of available midi devices
 
-call-seq:
-  count -> num
-
-*/
-static VALUE mdd_count(VALUE self) {
-	int count;
-	VALUE count_num;
-	count = Pm_CountDevices();
-	count_num = INT2NUM(count);
-	return count_num;
-}
-
-/*
-Returns a DeviceInfo object
-
-call-seq:
-	get -> DeviceInfo
-
-*/
-static VALUE mdd_get(VALUE self, VALUE device_number) {
-  PmDeviceInfo* deviceInfo;
-  VALUE obj;
-  int device_id = 0;
-  int device_count = 0;
-
-  device_count = Pm_CountDevices();
-
-  device_id = NUM2INT(device_number);
-
-  if (device_id > device_count -1) return Qnil;
-  
-  deviceInfo = Pm_GetDeviceInfo(device_id);
-  obj = Data_Wrap_Struct(cMidiDeviceInfo, 0, 0, deviceInfo);
-  return obj;
-}
 
 /*
 Returns the device name
@@ -311,44 +284,30 @@ call-seq:
 	name -> name
 
 */
-static VALUE mdd_name(VALUE self) {
-  VALUE string;
-  PmDeviceInfo* deviceInfo;
-  Data_Get_Struct(self,PmDeviceInfo, deviceInfo);
-  string = rb_str_new2(deviceInfo->name);
-  return string;
+
+static VALUE md_name(VALUE self) {
+  	VALUE string;
+	DeviceData *device;
+	
+	Data_Get_Struct(self,DeviceData, device);		
+  	string = rb_str_new2(device->deviceInfo->name);
+  	return string;
 }
 
 /*
-  returns true if device is an input device
+Returns the device id
 
 call-seq:
-	input? -> boolean
+	device_id -> id
 
 */
-
-static VALUE mdd_input(VALUE self) {
-	VALUE ret;
-  	PmDeviceInfo* deviceInfo;
-  	Data_Get_Struct(self,PmDeviceInfo, deviceInfo);
-	if (deviceInfo->input) return Qtrue;
-	return Qfalse;
+static VALUE md_device_id(VALUE self) {
+	DeviceData *device;
+	
+	Data_Get_Struct(self,DeviceData, device);
+	return INT2NUM(device->id);
 }
 
-/*
-  returns true if device is an out device
-
-call-seq:
-	output? -> boolean
-
-*/
-static VALUE mdd_output(VALUE self) {
-	VALUE ret;
-  	PmDeviceInfo* deviceInfo;
-  	Data_Get_Struct(self,PmDeviceInfo, deviceInfo);
-	if (deviceInfo->output) return Qtrue;
-	return Qfalse;
-}
 
 /*
   initializes the midi system
@@ -356,21 +315,71 @@ static VALUE mdd_output(VALUE self) {
   fires Pm_Initialize()
 
 */
-
 static VALUE ms_init(VALUE self) {
-	return self;
 	Pm_Initialize();
+	return self;
 }
+
 
 /*
   this function should be called after the midi system has been used. Fires Pm_Terminate()
-
+  (only needed if open is not used with block syntax)
 */
-static VALUE ms_destroy(VALUE self) {
-	return self;
+static VALUE ms_close(VALUE self) {
 	Pm_Terminate();
+	return self;
 }
 
+
+static VALUE ms_open(VALUE self) {
+	
+	int device_count;
+	int i=0;
+	VALUE inputs;
+	VALUE outputs;
+	VALUE self_object;
+	
+	self_object = rb_class_new_instance(0,NULL, cMidiSystem);
+	
+	Pm_Initialize();
+	device_count = Pm_CountDevices();
+	inputs = rb_ary_new();
+	outputs = rb_ary_new();
+	
+	for(i=0;i<device_count;i++) {
+		VALUE device_id[1];
+		VALUE device_object;
+		DeviceData *device;
+		
+		device_id[0] = INT2NUM(i);
+		device_object = rb_class_new_instance(1,device_id, cMidiDevice);
+		
+		Data_Get_Struct(device_object,DeviceData, device);
+		if (device->deviceInfo->input) {
+			rb_ary_push(inputs, device_object);
+		} else {
+			rb_ary_push(outputs, device_object);
+		}
+	}
+	
+	rb_iv_set(self_object, "@inputs", inputs);
+	rb_iv_set(self_object, "@outputs", outputs);
+	
+	if (rb_block_given_p()) {
+		rb_ensure(&rb_yield, self_object, &ms_close, self_object);
+	}
+	return self_object;
+	
+}
+
+
+
+static VALUE ms_inputs(VALUE self) {
+	return rb_iv_get(self, "@inputs");
+}
+static VALUE ms_outputs(VALUE self) {
+	return rb_iv_get(self, "@outputs");
+}
 
 void Init_portmidi() {
 	mPortmidi = rb_define_module("Portmidi");
@@ -378,25 +387,26 @@ void Init_portmidi() {
 	// MidiSystem
 	cMidiSystem = rb_define_class_under(mPortmidi, "MidiSystem", rb_cObject);
 	rb_define_method(cMidiSystem, "initialize", ms_init, 0);
-	rb_define_method(cMidiSystem, "destroy", ms_destroy, 0);
+	rb_define_singleton_method(cMidiSystem, "open", ms_open, 0);
+	rb_define_method(cMidiSystem, "close", ms_close, 0);
+	rb_define_method(cMidiSystem, "inputs", ms_inputs, 0);
+	rb_define_method(cMidiSystem, "outputs", ms_outputs, 0);
+	rb_define_method(cMidiSystem, "error_text", ms_error_text, 1);
 
-	// MidiDeviceInfo
-	cMidiDeviceInfo = rb_define_class_under(mPortmidi,"MidiDeviceInfo", rb_cObject);
-	rb_define_singleton_method(cMidiDeviceInfo, "get", mdd_get, 1);
-	rb_define_singleton_method(cMidiDeviceInfo, "count", mdd_count, 0);
-	rb_define_method(cMidiDeviceInfo, "name", mdd_name, 0);
-	rb_define_method(cMidiDeviceInfo, "input?", mdd_input, 0);
-	rb_define_method(cMidiDeviceInfo, "output?", mdd_output, 0);
 
 	// MidiDevice
 	cMidiDevice = rb_define_class_under(mPortmidi, "MidiDevice", rb_cObject);
 	rb_define_alloc_func(cMidiDevice, md_alloc);
+
   	rb_define_method(cMidiDevice, "initialize", md_init, 1);
+  	rb_define_method(cMidiDevice, "open", md_open, 0);
+	rb_define_method(cMidiDevice, "name", md_name, 0);
+	rb_define_method(cMidiDevice, "device_id", md_device_id, 0);
+
   	rb_define_method(cMidiDevice, "poll", md_poll, 0);
   	rb_define_method(cMidiDevice, "read", md_read, 0);
  	rb_define_method(cMidiDevice, "write_short", md_write_short, 1);
 	rb_define_method(cMidiDevice, "write_sysex", md_write_sysex, 1);
-	rb_define_method(cMidiDevice, "error_text", md_error_text, 1);
 	rb_define_method(cMidiDevice, "host_error?", md_host_error, 0);
 	rb_define_method(cMidiDevice, "host_error_text", md_host_error_text, 0);
 	rb_define_method(cMidiDevice, "filter=", md_set_filter, 1);

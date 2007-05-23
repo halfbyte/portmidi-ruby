@@ -1,9 +1,9 @@
 typedef struct _device {
-  PmStream* stream;
-  int type;
-} DeviceStream;
+  	PmStream* stream;
+  	int id;
+	const PmDeviceInfo* deviceInfo;
+} DeviceData;
 
 VALUE cMidiDevice;
-VALUE cMidiDeviceInfo;
 VALUE cMidiSystem;
 VALUE mPortmidi;
